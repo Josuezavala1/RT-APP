@@ -1,0 +1,262 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>RT Shot & Safety Calculator</title>
+    <link rel="stylesheet" href="styles.css" />
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+  </head>
+  <body>
+    <main class="app">
+      <header class="app-header">
+        <h1>RT Shot &amp; Safety Calculator</h1>
+        <p class="subtitle">Field-ready radiographic planning and safety reporting</p>
+      </header>
+
+      <section class="card" aria-labelledby="job-info-title">
+        <h2 id="job-info-title">1 — Job Information</h2>
+        <div class="grid">
+          <label>
+            Job / Work Order
+            <input id="jobWorkOrder" type="text" />
+          </label>
+          <label>
+            Location / Unit
+            <input id="locationUnit" type="text" />
+          </label>
+          <label>
+            Date
+            <input id="jobDate" type="date" />
+          </label>
+          <label>
+            Technician Name <span class="required">*</span>
+            <input id="technicianName" type="text" required />
+          </label>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="source-info-title">
+        <h2 id="source-info-title">2 — Source Information</h2>
+        <div class="grid">
+          <label>
+            Isotope <span class="required">*</span>
+            <select id="isotope" required>
+              <option value="Ir-192">Ir-192</option>
+              <option value="Co-60">Co-60</option>
+              <option value="Se-75">Se-75</option>
+            </select>
+          </label>
+          <label>
+            Source Activity (Ci) <span class="required">*</span>
+            <input id="activity" type="number" min="0" step="0.01" required />
+          </label>
+          <label>
+            Focal Spot Size: d <span class="required">*</span>
+            <input id="focusSpot" type="number" min="0" step="0.001" required />
+          </label>
+          <label>
+            Source serial / camera ID
+            <input id="sourceSerial" type="text" />
+          </label>
+          <label>
+            Exposure rate constant Γ (mR·ft²/mCi·hr)
+            <input id="gammaConstant" type="number" min="0" step="0.01" />
+          </label>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="planning-title">
+        <h2 id="planning-title">3 — Estimated Exposure / Time Planning</h2>
+        <p class="hint"><strong>ESTIMATE – Pre-job planning</strong></p>
+        <div class="grid">
+          <label>
+            Estimated Total Exposure
+            <input id="estimatedTotalExposure" type="number" min="0" step="0.1" />
+          </label>
+          <label>
+            Exposure Units
+            <select id="exposureUnits">
+              <option value="minutes">minutes</option>
+              <option value="seconds">seconds</option>
+            </select>
+          </label>
+          <label>
+            Number of Exposures
+            <input id="numberOfExposures" type="number" min="1" step="1" value="1" />
+          </label>
+        </div>
+
+        <div class="results">
+          <div class="result-item"><strong>Estimated exposure @ 1 ft (unshielded):</strong> <span id="exposureAt1ft">—</span></div>
+          <div class="result-item"><strong>Estimated exposure per shot (time):</strong> <span id="estimatedShotDuration">—</span></div>
+          <div class="result-item"><strong>Estimated total exposure time:</strong> <span id="estimatedTotalJobExposure">—</span></div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="material-title">
+        <h2 id="material-title">4 — Material Attenuation Stack</h2>
+        <p class="hint">HVL values auto-fill from isotope/material lookup. Enable override to manually edit a row HVL.</p>
+        <button id="addMaterial" class="btn btn-primary" type="button">Add Material Layer</button>
+        <div id="materialsContainer" class="materials" aria-live="polite"></div>
+        <div class="results">
+          <div class="result-item"><strong>Total HVLs:</strong> <span id="totalHvls">—</span></div>
+          <div class="result-item"><strong>Attenuation factor (0.5 ^ total_HVLs):</strong> <span id="attenuationFactor">—</span></div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="boundaries-title">
+        <h2 id="boundaries-title">5 — Radiation Boundaries</h2>
+        <div class="grid">
+          <label>
+            BeamOnMinutesPerHour
+            <input id="beamOnMinutesPerHour" type="number" min="0.1" step="0.1" value="6" required />
+          </label>
+        </div>
+        <div class="results">
+          <div class="result-item"><strong>Exposure @ 1 ft (unshielded baseline):</strong> <span id="boundaryExposure1ft">—</span></div>
+          <div class="result-item"><strong>100 mR/hr distance (Shielded):</strong> <span id="boundary100mr">—</span></div>
+          <div class="result-item"><strong>AllowedRateDuringShot_mRhr:</strong> <span id="allowedRateDuringShot">—</span></div>
+          <div class="result-item"><strong>2 mR/hr (Time-Weighted) Barricade:</strong> <span id="boundary2mr">—</span></div>
+        </div>
+      </section>
+
+      <section class="card" aria-labelledby="shot-title">
+        <h2 id="shot-title">6 — Shot Cards + Step 5 UG (Repeatable)</h2>
+        <p class="hint">Enter PDD or SPD to solve field distances and validate Ug live. d is fixed for the day.</p>
+        <button id="addShot" class="btn btn-primary" type="button">Add Shot</button>
+        <div id="shotsContainer" class="shots" aria-live="polite"></div>
+      </section>
+
+      <section class="card" aria-labelledby="warning-title">
+        <h2 id="warning-title">Safety Warnings</h2>
+        <div id="globalWarnings" class="warnings"></div>
+      </section>
+
+      <section class="card final-card" aria-labelledby="pdf-title">
+        <h2 id="pdf-title">PDF Report</h2>
+        <button id="generatePdf" class="btn btn-generate" type="button">Generate &amp; Download PDF</button>
+      </section>
+    </main>
+
+    <template id="shotTemplate">
+      <article class="shot-card">
+        <div class="shot-head">
+          <h3 class="shot-name">Shot — Config 1</h3>
+          <button class="btn btn-small btn-danger remove-shot" type="button">Remove</button>
+        </div>
+        <div class="grid">
+          <label>
+            d (focal spot size — fixed)
+            <input class="d-input" type="number" min="0" step="0.001" readonly />
+          </label>
+          <label>
+            Ug_limit
+            <input class="ug-limit" type="number" min="0.001" step="0.001" value="0.024" />
+          </label>
+          <label>
+            Config
+            <select class="config-input" required>
+              <option value="1">1</option>
+              <option value="2">2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+            </select>
+          </label>
+          <label>
+            View
+            <select class="view-input" required>
+              <option value="0°">0° (Straight)</option>
+              <option value="90°">90° (Profile)</option>
+            </select>
+          </label>
+          <label>
+            Direction
+            <select class="direction-input" required>
+              <option value="North">North</option>
+              <option value="East">East</option>
+              <option value="South">South</option>
+              <option value="West">West</option>
+              <option value="Up">Up</option>
+              <option value="Down">Down</option>
+            </select>
+          </label>
+          <label>
+            PDD (Panel to Discontinuity Distance)
+            <input class="pdd" type="number" min="0" step="0.01" />
+          </label>
+          <label>
+            SPD (Source to Panel Distance)
+            <input class="spd-input" type="number" min="0" step="0.01" />
+          </label>
+        </div>
+
+        <div class="grid">
+          <label>
+            Actual Ball Diameter (in)
+            <input class="actual-ball" type="number" min="0.001" step="0.001" value="1.000" />
+          </label>
+          <label>
+            Measured Ball on Film (in)
+            <input class="measured-ball" type="number" min="0" step="0.001" />
+          </label>
+        </div>
+
+        <div class="results">
+          <div class="result-item"><strong>SPD_min_UG:</strong> <span class="spd-min-ug">—</span></div>
+          <div class="result-item"><strong>SPD_min_Blowup:</strong> <span class="spd-min-blowup">—</span></div>
+          <div class="result-item"><strong>Minimum SPD required (UG + Blowup 20%):</strong> <span class="spd-min-final">—</span></div>
+          <div class="result-item"><strong>UG:</strong> <span class="ug">—</span></div>
+          <div class="result-item"><strong>UG PASS/FAIL:</strong> <span class="ug-status">—</span></div>
+          <div class="result-item"><strong>Geometry Blowup%:</strong> <span class="magnification">—</span></div>
+          <div class="result-item"><strong>Geometry Blowup PASS/FAIL:</strong> <span class="blowup-status">—</span></div>
+          <div class="result-item"><strong>Film Blowup%:</strong> <span class="film-blowup">—</span></div>
+          <div class="result-item"><strong>Film Blowup PASS/FAIL:</strong> <span class="film-status">—</span></div>
+          <div class="result-item"><strong>Overall PASS/FAIL:</strong> <span class="overall-status">—</span></div>
+          <div class="result-item helper-text"><strong>Helper:</strong> <span class="shot-helper">Enter PDD or SPD to calculate the other distance.</span></div>
+          <div class="result-item"><strong>Estimated Exposure Time:</strong> <span class="exposure">—</span></div>
+        </div>
+
+        <div class="warnings shot-warnings"></div>
+      </article>
+    </template>
+
+    <template id="materialTemplate">
+      <article class="material-row">
+        <div class="grid material-grid">
+          <label>
+            Material
+            <select class="material-name">
+              <option>Steel</option>
+              <option>Concrete</option>
+              <option>Lead</option>
+              <option>Aluminum</option>
+              <option>Water</option>
+              <option>Insulation (Generic)</option>
+              <option>Air</option>
+            </select>
+          </label>
+          <label>
+            Thickness (inches)
+            <input class="material-thickness" type="number" min="0" step="0.01" />
+          </label>
+          <label>
+            HVL (inches)
+            <input class="material-hvl" type="number" min="0.0001" step="0.0001" />
+          </label>
+          <label>
+            Override HVL
+            <input class="material-override" type="checkbox" />
+          </label>
+        </div>
+        <div class="material-meta">
+          <span class="material-hvl-count">HVL Count: —</span>
+          <button class="btn btn-small btn-danger remove-material" type="button">Remove</button>
+        </div>
+      </article>
+    </template>
+
+    <script src="script.js"></script>
+  </body>
+</html>
