@@ -86,6 +86,10 @@
             Number of Exposures
             <input id="numberOfExposures" type="number" min="1" step="1" value="1" />
           </label>
+          <label>
+            Beam On Minutes Per Hour <span class="required">*</span>
+            <input id="beamOnMinutesPerHour" type="number" min="0.1" step="0.1" value="6" required />
+          </label>
         </div>
 
         <div class="results">
@@ -110,8 +114,9 @@
         <h2 id="boundaries-title">5 — Radiation Boundaries</h2>
         <div class="results">
           <div class="result-item"><strong>Exposure @ 1 ft (unshielded baseline):</strong> <span id="boundaryExposure1ft">—</span></div>
+          <div class="result-item"><strong>Allowed rate during shot (mR/hr):</strong> <span id="allowedRateDuringShot">—</span></div>
           <div class="result-item"><strong>100 mR/hr distance (Shielded):</strong> <span id="boundary100mr">—</span></div>
-          <div class="result-item"><strong>2 mR/hr distance (Shielded):</strong> <span id="boundary2mr">—</span></div>
+          <div class="result-item"><strong>2 mR/hr distance (Time-Weighted, Shielded):</strong> <span id="boundary2mr">—</span></div>
         </div>
       </section>
 
