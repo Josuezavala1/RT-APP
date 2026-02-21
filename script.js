@@ -50,6 +50,7 @@ const fields = {
   estimatedTotalExposure: document.getElementById("estimatedTotalExposure"),
   exposureUnits: document.getElementById("exposureUnits"),
   numberOfExposures: document.getElementById("numberOfExposures"),
+  beamOnMinutesPerHour: document.getElementById("beamOnMinutesPerHour"),
 };
 
 const ui = {
@@ -59,6 +60,7 @@ const ui = {
   totalHvls: document.getElementById("totalHvls"),
   attenuationFactor: document.getElementById("attenuationFactor"),
   boundaryExposure1ft: document.getElementById("boundaryExposure1ft"),
+  allowedRateDuringShot: document.getElementById("allowedRateDuringShot"),
   boundary100mr: document.getElementById("boundary100mr"),
   boundary2mr: document.getElementById("boundary2mr"),
   globalWarningsEl: document.getElementById("globalWarnings"),
@@ -177,21 +179,26 @@ function estimatePlanningTimes() {
 
 function updateBoundaries(attenuationFactor) {
   const exposure1ft = getExposureAt1ft();
-  ui.boundaryExposure1ft.textContent = exposure1ft === null ? "—" : `${formatNumber(exposure1ft, 1)} R/hr`;
+  const beamOnMinutesPerHour = n(fields.beamOnMinutesPerHour.value);
 
-  if (!exposure1ft) {
+  ui.boundaryExposure1ft.textContent = exposure1ft === null ? "—" : `${formatNumber(exposure1ft, 1)} R/hr`;
+  const allowedRateDuringShot = beamOnMinutesPerHour ? 2 * (60 / beamOnMinutesPerHour) : null;
+  ui.allowedRateDuringShot.textContent =
+    allowedRateDuringShot === null ? "—" : `${formatNumber(allowedRateDuringShot, 2)} mR/hr`;
+
+  if (!exposure1ft || !allowedRateDuringShot) {
     ui.boundary100mr.textContent = "—";
     ui.boundary2mr.textContent = "—";
-    return { exposure1ft: null, d100: null, d2: null };
+    return { exposure1ft: exposure1ft ?? null, beamOnMinutesPerHour, allowedRateDuringShot, d100: null, d2: null };
   }
 
   const d100 = Math.sqrt((exposure1ft * attenuationFactor) / 100);
-  const d2 = Math.sqrt((exposure1ft * attenuationFactor) / 2);
+  const d2 = Math.sqrt((exposure1ft * attenuationFactor) / allowedRateDuringShot);
 
   ui.boundary100mr.textContent = `${formatNumber(d100, 2)} ft`;
   ui.boundary2mr.textContent = `${formatNumber(d2, 2)} ft`;
 
-  return { exposure1ft, d100, d2 };
+  return { exposure1ft, beamOnMinutesPerHour, allowedRateDuringShot, d100, d2 };
 }
 
 function getExposureEstimateMinutes(spd) {
@@ -292,6 +299,7 @@ function evaluateAllShots() {
   if (!fields.technicianName.value.trim()) missing.push("Technician Name");
   if (!fields.activity.value) missing.push("Source Activity (Ci)");
   if (!fields.focusSpot.value) missing.push("Focal Spot Size d");
+  if (!fields.beamOnMinutesPerHour.value) missing.push("Beam On Minutes Per Hour");
 
   if (missing.length) {
     ui.globalWarningsEl.appendChild(createWarning(`Missing required inputs: ${missing.join(", ")}.`, "red"));
@@ -427,8 +435,10 @@ function buildPdfLines(summary) {
 
   lines.push("Radiation Boundaries");
   lines.push(`Exposure_1ft (unshielded): ${boundaries.exposure1ft === null ? "-" : `${formatNumber(boundaries.exposure1ft, 1)} R/hr`}`);
+  lines.push(`BeamOnMinutesPerHour: ${boundaries.beamOnMinutesPerHour ?? "-"}`);
+  lines.push(`AllowedRateDuringShot_mRhr: ${boundaries.allowedRateDuringShot === null ? "-" : formatNumber(boundaries.allowedRateDuringShot, 2)}`);
+  lines.push(`2 mR/hr (Time-Weighted) distance (Shielded): ${boundaries.d2 === null ? "-" : `${formatNumber(boundaries.d2, 2)} ft`}`);
   lines.push(`100 mR/hr distance (Shielded): ${boundaries.d100 === null ? "-" : `${formatNumber(boundaries.d100, 2)} ft`}`);
-  lines.push(`2 mR/hr distance (Shielded): ${boundaries.d2 === null ? "-" : `${formatNumber(boundaries.d2, 2)} ft`}`);
   lines.push("");
 
   lines.push("Shot Cards / Step 5 UG");
