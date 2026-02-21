@@ -2,9 +2,9 @@ const MAX_MAG_PERCENT = 20;
 const DEFAULT_UG_LIMIT = 0.024;
 
 const GAMMA_DEFAULTS = {
-  "Ir-192": 4.8,
-  "Co-60": 13.2,
-  "Se-75": 2.1,
+  "Ir-192": 5.2,
+  "Co-60": 14,
+  "Se-75": 2.5,
 };
 
 const HVL_LOOKUP = {
@@ -97,7 +97,8 @@ function selectedGamma() {
 }
 
 function setGammaDefault() {
-  fields.gammaConstant.value = String(GAMMA_DEFAULTS[fields.isotope.value]);
+  const gamma = GAMMA_DEFAULTS[fields.isotope.value];
+  fields.gammaConstant.value = `${formatNumber(gamma, 1)} R/hr per Ci @ 1 ft`;
 }
 
 function getLookupHvl(isotope, material) {
@@ -157,7 +158,7 @@ function estimatePlanningTimes() {
   const exposures = n(fields.numberOfExposures.value) ?? 1;
   const exposureAt1ft = getExposureAt1ft();
 
-  ui.exposureAt1ft.textContent = exposureAt1ft === null ? "—" : `${formatNumber(exposureAt1ft, 1)} mR/hr`;
+  ui.exposureAt1ft.textContent = exposureAt1ft === null ? "—" : `${formatNumber(exposureAt1ft, 1)} R/hr`;
 
   if (!estimatedInput || exposures <= 0) {
     ui.estimatedShotDuration.textContent = "—";
@@ -176,7 +177,7 @@ function estimatePlanningTimes() {
 
 function updateBoundaries(attenuationFactor) {
   const exposure1ft = getExposureAt1ft();
-  ui.boundaryExposure1ft.textContent = exposure1ft === null ? "—" : `${formatNumber(exposure1ft, 1)} mR/hr`;
+  ui.boundaryExposure1ft.textContent = exposure1ft === null ? "—" : `${formatNumber(exposure1ft, 1)} R/hr`;
 
   if (!exposure1ft) {
     ui.boundary100mr.textContent = "—";
@@ -405,13 +406,13 @@ function buildPdfLines(summary) {
   lines.push(`Source Activity (Ci): ${fields.activity.value || "-"}`);
   lines.push(`Focal Spot Size d: ${fields.focusSpot.value || "-"}`);
   lines.push(`Source serial / camera ID: ${fields.sourceSerial.value || "-"}`);
-  lines.push(`Exposure rate constant Γ: ${fields.gammaConstant.value || "-"}`);
+  lines.push(`Gamma Constant (Γ): ${fields.gammaConstant.value || "-"}`);
   lines.push("");
 
   lines.push("ESTIMATE – Pre-job planning");
   lines.push(`Estimated total exposure input: ${fields.estimatedTotalExposure.value || "-"} ${fields.exposureUnits.value}`);
   lines.push(`Number of exposures: ${fields.numberOfExposures.value || "-"}`);
-  lines.push(`Estimated exposure @ 1 ft (unshielded): ${boundaries.exposure1ft === null ? "-" : `${formatNumber(boundaries.exposure1ft, 1)} mR/hr`}`);
+  lines.push(`Estimated exposure @ 1 ft (unshielded): ${boundaries.exposure1ft === null ? "-" : `${formatNumber(boundaries.exposure1ft, 1)} R/hr`}`);
   lines.push(`Estimated exposure per shot: ${planning.perShotMinutes === null ? "-" : `${formatNumber(planning.perShotMinutes, 1)} min`}`);
   lines.push(`Estimated total exposure time: ${planning.totalMinutes === null ? "-" : `${formatNumber(planning.totalMinutes, 1)} min`}`);
   lines.push("");
@@ -425,7 +426,7 @@ function buildPdfLines(summary) {
   lines.push("");
 
   lines.push("Radiation Boundaries");
-  lines.push(`Exposure_1ft (unshielded): ${boundaries.exposure1ft === null ? "-" : `${formatNumber(boundaries.exposure1ft, 1)} mR/hr`}`);
+  lines.push(`Exposure_1ft (unshielded): ${boundaries.exposure1ft === null ? "-" : `${formatNumber(boundaries.exposure1ft, 1)} R/hr`}`);
   lines.push(`100 mR/hr distance (Shielded): ${boundaries.d100 === null ? "-" : `${formatNumber(boundaries.d100, 2)} ft`}`);
   lines.push(`2 mR/hr distance (Shielded): ${boundaries.d2 === null ? "-" : `${formatNumber(boundaries.d2, 2)} ft`}`);
   lines.push("");
