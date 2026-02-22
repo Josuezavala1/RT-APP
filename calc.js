@@ -9,8 +9,6 @@
     'Ir-192': 5200,
     'Co-60': 14000,
     'Se-75': 2200,
-    'Yb-169': 1300,
-    'Cs-137': 3400,
   };
 
   const TARGETS = {
@@ -18,42 +16,43 @@
     highRadArea: 100,
   };
 
-  function computeAttenuation(totalHVL) {
-    return Math.pow(0.5, totalHVL);
+  const MATERIAL_HVL_IN = {
+    Concrete: { 'Ir-192': 1.9, 'Co-60': 2.6, 'Se-75': 1.4 },
+    Steel: { 'Ir-192': 0.65, 'Co-60': 0.9, 'Se-75': 0.45 },
+    Lead: { 'Ir-192': 0.25, 'Co-60': 0.45, 'Se-75': 0.15 },
+    Tungsten: { 'Ir-192': 0.19, 'Co-60': 0.33, 'Se-75': 0.12 },
+  };
+
+  function layerAttenuation(hvlCount) {
+    return Math.pow(0.5, Number(hvlCount));
   }
 
-  function timeHoursFromWorkflow(input) {
-    if (input.mode === 'single-plus-rate') {
-      const minutes = Number(input.minutesPerExposure);
-      const exposuresPerHour = Number(input.exposuresPerHour);
-      if (!Number.isFinite(minutes) || !Number.isFinite(exposuresPerHour) || minutes < 0 || exposuresPerHour < 0) return null;
-      return (minutes * 60 * exposuresPerHour) / 3600;
+  function combinedAttenuation(hvlCounts) {
+    return hvlCounts.reduce((acc, hvl) => acc * layerAttenuation(hvl), 1);
+  }
+
+  function timeFractionFromInputs({ exposuresPerHour, secondsPerExposure, totalSecondsPerHour }) {
+    const hasTotal = Number.isFinite(totalSecondsPerHour) && totalSecondsPerHour >= 0;
+    if (hasTotal) return totalSecondsPerHour / 3600;
+
+    if (!Number.isFinite(exposuresPerHour) || !Number.isFinite(secondsPerExposure) || exposuresPerHour < 0 || secondsPerExposure < 0) {
+      return null;
     }
 
-    if (input.mode === 'count-plus-seconds') {
-      const exposureCount = Number(input.exposureCount);
-      const secondsPerExposure = Number(input.secondsPerExposure);
-      if (!Number.isFinite(exposureCount) || !Number.isFinite(secondsPerExposure) || exposureCount < 0 || secondsPerExposure < 0) return null;
-      return (exposureCount * secondsPerExposure) / 3600;
-    }
-
-    return null;
+    return (exposuresPerHour * secondsPerExposure) / 3600;
   }
 
-  function barricadeDistanceFt({ activityCi, gammaConstantMrPerHrPerCi, timeHours, attenuation, targetMrPerHr }) {
-    return Math.sqrt((activityCi * gammaConstantMrPerHrPerCi * timeHours * attenuation) / targetMrPerHr);
-  }
-
-  function roundUpToNearestFive(value) {
-    return Math.ceil(value / 5) * 5;
+  function barricadeDistanceFt({ activityCi, gammaConstantMrPerHrPerCi, timeFraction, attenuationFactor, targetMrPerHr }) {
+    return Math.sqrt((activityCi * gammaConstantMrPerHrPerCi * timeFraction * attenuationFactor) / targetMrPerHr);
   }
 
   return {
     GAMMA_CONSTANTS,
     TARGETS,
-    computeAttenuation,
-    timeHoursFromWorkflow,
+    MATERIAL_HVL_IN,
+    layerAttenuation,
+    combinedAttenuation,
+    timeFractionFromInputs,
     barricadeDistanceFt,
-    roundUpToNearestFive,
   };
 });
