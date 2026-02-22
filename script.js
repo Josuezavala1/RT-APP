@@ -1,519 +1,141 @@
-const MAX_MAG_PERCENT = 20;
-const DEFAULT_UG_LIMIT = 0.024;
-
-const GAMMA_DEFAULTS = {
-  "Ir-192": 5.2,
-  "Co-60": 14,
-  "Se-75": 2.5,
-};
-
-const HVL_LOOKUP = {
-  "Ir-192": {
-    Steel: 0.5,
-    Concrete: 1.75,
-    Lead: 0.25,
-    Aluminum: 0.7,
-    Water: 2.0,
-    "Insulation (Generic)": 4.0,
-    Air: 120.0,
-  },
-  "Co-60": {
-    Steel: 0.85,
-    Concrete: 2.38,
-    Lead: 0.48,
-    Aluminum: 1.3,
-    Water: 4.0,
-    "Insulation (Generic)": 8.0,
-    Air: 300.0,
-  },
-  "Se-75": {
-    Steel: 0.28,
-    Concrete: 1.0,
-    Lead: 0.12,
-    Aluminum: 0.4,
-    Water: 1.2,
-    "Insulation (Generic)": 2.5,
-    Air: 60.0,
-  },
-};
-
 const fields = {
-  jobWorkOrder: document.getElementById("jobWorkOrder"),
-  locationUnit: document.getElementById("locationUnit"),
-  jobDate: document.getElementById("jobDate"),
-  technicianName: document.getElementById("technicianName"),
-  isotope: document.getElementById("isotope"),
-  activity: document.getElementById("activity"),
-  focusSpot: document.getElementById("focusSpot"),
-  sourceSerial: document.getElementById("sourceSerial"),
-  gammaConstant: document.getElementById("gammaConstant"),
-  estimatedTotalExposure: document.getElementById("estimatedTotalExposure"),
-  exposureUnits: document.getElementById("exposureUnits"),
-  numberOfExposures: document.getElementById("numberOfExposures"),
-  beamOnMinutesPerHour: document.getElementById("beamOnMinutesPerHour"),
+  isotope: document.getElementById('isotope'),
+  activityCi: document.getElementById('activityCi'),
+  gammaConstant: document.getElementById('gammaConstant'),
+  collimatorHvl: document.getElementById('collimatorHvl'),
+  additionalHvl: document.getElementById('additionalHvl'),
+  timeMode: document.getElementById('timeMode'),
+  singleMinutes: document.getElementById('singleMinutes'),
+  exposuresPerHour: document.getElementById('exposuresPerHour'),
+  exposureCount: document.getElementById('exposureCount'),
+  secondsPerExposure: document.getElementById('secondsPerExposure'),
+  roundingMode: document.getElementById('roundingMode'),
 };
 
 const ui = {
-  exposureAt1ft: document.getElementById("exposureAt1ft"),
-  estimatedShotDuration: document.getElementById("estimatedShotDuration"),
-  estimatedTotalJobExposure: document.getElementById("estimatedTotalJobExposure"),
-  totalHvls: document.getElementById("totalHvls"),
-  attenuationFactor: document.getElementById("attenuationFactor"),
-  boundaryExposure1ft: document.getElementById("boundaryExposure1ft"),
-  allowedRateDuringShot: document.getElementById("allowedRateDuringShot"),
-  boundary100mr: document.getElementById("boundary100mr"),
-  boundary2mr: document.getElementById("boundary2mr"),
-  globalWarningsEl: document.getElementById("globalWarnings"),
+  totalHvl: document.getElementById('totalHvl'),
+  attenuation: document.getElementById('attenuation'),
+  timeHours: document.getElementById('timeHours'),
+  distance2: document.getElementById('distance2'),
+  distance100: document.getElementById('distance100'),
+  validation: document.getElementById('validation'),
+  singleMinutesWrap: document.getElementById('singleMinutesWrap'),
+  exposuresPerHourWrap: document.getElementById('exposuresPerHourWrap'),
+  exposureCountWrap: document.getElementById('exposureCountWrap'),
+  secondsPerExposureWrap: document.getElementById('secondsPerExposureWrap'),
 };
 
-const addMaterialBtn = document.getElementById("addMaterial");
-const materialsContainer = document.getElementById("materialsContainer");
-const materialTemplate = document.getElementById("materialTemplate");
-
-const addShotBtn = document.getElementById("addShot");
-const shotsContainer = document.getElementById("shotsContainer");
-const shotTemplate = document.getElementById("shotTemplate");
-const generatePdfBtn = document.getElementById("generatePdf");
-
-let shotCounter = 0;
-let materialCounter = 0;
-
 function n(value) {
-  const parsed = parseFloat(value);
+  const parsed = Number.parseFloat(value);
   return Number.isFinite(parsed) ? parsed : null;
 }
 
-function formatNumber(value, decimals = 2) {
-  return Number.isFinite(value) ? value.toFixed(decimals) : "—";
+function setGammaText() {
+  const gamma = RTCalc.GAMMA_CONSTANTS[fields.isotope.value];
+  fields.gammaConstant.value = `${gamma} mR/hr per Ci @ 1 ft`;
 }
 
-function createWarning(text, level = "yellow") {
-  const div = document.createElement("div");
-  div.className = `warning ${level}`;
-  div.textContent = text;
-  return div;
+function setTimeModeVisibility() {
+  const singleMode = fields.timeMode.value === 'single-plus-rate';
+  ui.singleMinutesWrap.classList.toggle('hidden', !singleMode);
+  ui.exposuresPerHourWrap.classList.toggle('hidden', !singleMode);
+  ui.exposureCountWrap.classList.toggle('hidden', singleMode);
+  ui.secondsPerExposureWrap.classList.toggle('hidden', singleMode);
 }
 
-function selectedGamma() {
-  return n(fields.gammaConstant.value) ?? GAMMA_DEFAULTS[fields.isotope.value];
+function clearValidation() {
+  ui.validation.innerHTML = '';
 }
 
-function setGammaDefault() {
-  const gamma = GAMMA_DEFAULTS[fields.isotope.value];
-  fields.gammaConstant.value = `${formatNumber(gamma, 1)} R/hr per Ci @ 1 ft`;
+function pushValidation(message) {
+  const entry = document.createElement('div');
+  entry.className = 'warning red';
+  entry.textContent = message;
+  ui.validation.appendChild(entry);
 }
 
-function getLookupHvl(isotope, material) {
-  return HVL_LOOKUP[isotope]?.[material] ?? null;
-}
-
-function refreshMaterialRowFromLookup(row) {
-  const materialName = row.querySelector(".material-name").value;
-  const override = row.querySelector(".material-override").checked;
-  const hvlInput = row.querySelector(".material-hvl");
-  hvlInput.readOnly = !override;
-
-  if (!override) {
-    const hvl = getLookupHvl(fields.isotope.value, materialName);
-    hvlInput.value = hvl === null ? "" : String(hvl);
+function formatDistance(value, mode) {
+  if (mode === 'field') {
+    return `${RTCalc.roundUpToNearestFive(value)} ft`;
   }
+  return `${value.toFixed(2)} ft`;
 }
 
-function getMaterials() {
-  const rows = [...materialsContainer.querySelectorAll(".material-row")];
+function evaluate() {
+  clearValidation();
+  setTimeModeVisibility();
 
-  return rows.map((row) => {
-    const materialName = row.querySelector(".material-name").value;
-    const thickness = n(row.querySelector(".material-thickness").value);
-    const hvl = n(row.querySelector(".material-hvl").value);
-    const override = row.querySelector(".material-override").checked;
-    const hvlCount = thickness && hvl ? thickness / hvl : null;
+  const activityCi = n(fields.activityCi.value);
+  const gamma = RTCalc.GAMMA_CONSTANTS[fields.isotope.value];
+  const collimatorHvl = n(fields.collimatorHvl.value);
+  const additionalHvl = n(fields.additionalHvl.value);
 
-    row.querySelector(".material-hvl-count").textContent =
-      `HVL Count: ${hvlCount === null ? "—" : formatNumber(hvlCount, 3)}`;
+  if (activityCi === null || activityCi < 0) pushValidation('Enter a valid Source Activity (Ci).');
+  if (collimatorHvl === null || collimatorHvl < 0) pushValidation('Collimator HVL must be a valid number >= 0.');
+  if (additionalHvl === null || additionalHvl < 0) pushValidation('Additional HVL must be a valid number >= 0.');
 
-    return { materialName, thickness, hvl, hvlCount, override };
+  const totalHvl = (collimatorHvl ?? 0) + (additionalHvl ?? 0);
+  const attenuation = RTCalc.computeAttenuation(totalHvl);
+
+  ui.totalHvl.textContent = totalHvl.toFixed(4);
+  ui.attenuation.textContent = attenuation.toFixed(8);
+
+  const timeHours = RTCalc.timeHoursFromWorkflow({
+    mode: fields.timeMode.value,
+    minutesPerExposure: n(fields.singleMinutes.value),
+    exposuresPerHour: n(fields.exposuresPerHour.value),
+    exposureCount: n(fields.exposureCount.value),
+    secondsPerExposure: n(fields.secondsPerExposure.value),
   });
-}
 
-function getAttenuationSummary() {
-  const materials = getMaterials();
-  const totalHVLs = materials.reduce((sum, m) => sum + (m.hvlCount ?? 0), 0);
-  const attenuationFactor = Math.pow(0.5, totalHVLs);
-
-  ui.totalHvls.textContent = formatNumber(totalHVLs, 3);
-  ui.attenuationFactor.textContent = formatNumber(attenuationFactor, 6);
-
-  return { materials, totalHVLs, attenuationFactor };
-}
-
-function getExposureAt1ft() {
-  const gamma = selectedGamma();
-  const activity = n(fields.activity.value);
-  if (!gamma || !activity) return null;
-  return gamma * activity;
-}
-
-function estimatePlanningTimes() {
-  const estimatedInput = n(fields.estimatedTotalExposure.value);
-  const units = fields.exposureUnits.value;
-  const exposures = n(fields.numberOfExposures.value) ?? 1;
-  const exposureAt1ft = getExposureAt1ft();
-
-  ui.exposureAt1ft.textContent = exposureAt1ft === null ? "—" : `${formatNumber(exposureAt1ft, 1)} R/hr`;
-
-  if (!estimatedInput || exposures <= 0) {
-    ui.estimatedShotDuration.textContent = "—";
-    ui.estimatedTotalJobExposure.textContent = "—";
-    return { perShotMinutes: null, totalMinutes: null, estimatedInput: null, units, exposures };
+  if (timeHours === null) {
+    pushValidation('Enter valid time inputs for the selected workflow.');
+    ui.timeHours.textContent = '—';
+    ui.distance2.textContent = '—';
+    ui.distance100.textContent = '—';
+    return;
   }
 
-  const totalMinutes = units === "seconds" ? estimatedInput / 60 : estimatedInput;
-  const perShotMinutes = totalMinutes / exposures;
+  ui.timeHours.textContent = `${timeHours.toFixed(6)} hr`;
 
-  ui.estimatedShotDuration.textContent = `${formatNumber(perShotMinutes, 1)} min`;
-  ui.estimatedTotalJobExposure.textContent = `${formatNumber(totalMinutes, 1)} min`;
-
-  return { perShotMinutes, totalMinutes, estimatedInput, units, exposures };
-}
-
-function updateBoundaries(attenuationFactor) {
-  const exposure1ft = getExposureAt1ft();
-  const beamOnMinutesPerHour = n(fields.beamOnMinutesPerHour.value);
-
-  ui.boundaryExposure1ft.textContent = exposure1ft === null ? "—" : `${formatNumber(exposure1ft, 1)} R/hr`;
-  const allowedRateDuringShot = beamOnMinutesPerHour ? 2 * (60 / beamOnMinutesPerHour) : null;
-  ui.allowedRateDuringShot.textContent =
-    allowedRateDuringShot === null ? "—" : `${formatNumber(allowedRateDuringShot, 2)} mR/hr`;
-
-  if (!exposure1ft || !allowedRateDuringShot) {
-    ui.boundary100mr.textContent = "—";
-    ui.boundary2mr.textContent = "—";
-    return { exposure1ft: exposure1ft ?? null, beamOnMinutesPerHour, allowedRateDuringShot, d100: null, d2: null };
+  if (timeHours === 0) {
+    pushValidation('No exposure time entered.');
+    ui.distance2.textContent = '0 ft';
+    ui.distance100.textContent = '0 ft';
+    return;
   }
 
-  const d100 = Math.sqrt((exposure1ft * attenuationFactor) / 100);
-  const d2 = Math.sqrt((exposure1ft * attenuationFactor) / allowedRateDuringShot);
-
-  ui.boundary100mr.textContent = `${formatNumber(d100, 2)} ft`;
-  ui.boundary2mr.textContent = `${formatNumber(d2, 2)} ft`;
-
-  return { exposure1ft, beamOnMinutesPerHour, allowedRateDuringShot, d100, d2 };
-}
-
-function getExposureEstimateMinutes(spd) {
-  const activity = n(fields.activity.value);
-  const gamma = selectedGamma();
-  if (!activity || !spd || !gamma) return null;
-
-  const { totalHVLs } = getAttenuationSummary();
-  const attenuationScale = Math.pow(2, totalHVLs);
-  return (attenuationScale * Math.pow(spd, 2)) / (activity * gamma * 10);
-}
-
-function evaluateShot(shotEl) {
-  const config = shotEl.querySelector(".config-input").value;
-  const view = shotEl.querySelector(".view-input").value;
-  const direction = shotEl.querySelector(".direction-input").value;
-  const spd = n(shotEl.querySelector(".spd-input").value);
-  const pdd = n(shotEl.querySelector(".pdd").value);
-  const d = n(shotEl.querySelector(".d-input").value);
-  const ugLimit = n(shotEl.querySelector(".ug-limit").value) ?? DEFAULT_UG_LIMIT;
-
-  const spdMinEl = shotEl.querySelector(".spd-min");
-  const pddMaxEl = shotEl.querySelector(".pdd-max");
-  const ugEl = shotEl.querySelector(".ug");
-  const ugStatusEl = shotEl.querySelector(".ug-status");
-  const helperEl = shotEl.querySelector(".shot-helper");
-  const magEl = shotEl.querySelector(".magnification");
-  const exposureEl = shotEl.querySelector(".exposure");
-  const shotWarningsEl = shotEl.querySelector(".shot-warnings");
-
-  shotWarningsEl.innerHTML = "";
-
-  if (!d || !ugLimit) {
-    helperEl.textContent = "Set d and Ug_limit to enable calculations.";
-    [spdMinEl, pddMaxEl, ugEl, ugStatusEl, magEl, exposureEl].forEach((el) => (el.textContent = "—"));
-    return { warnings: ["Missing d or Ug_limit."], data: null };
+  if (ui.validation.childElementCount > 0) {
+    ui.distance2.textContent = '—';
+    ui.distance100.textContent = '—';
+    return;
   }
 
-  const spdMin = pdd ? (d * pdd) / ugLimit : null;
-  const pddMax = spd ? (ugLimit * spd) / d : null;
-  spdMinEl.textContent = spdMin === null ? "—" : `${formatNumber(spdMin, 2)} in`;
-  pddMaxEl.textContent = pddMax === null ? "—" : `${formatNumber(pddMax, 2)} in`;
-
-  let ug = null;
-  let ugPass = null;
-  const warnings = [];
-
-  if (!spd && !pdd) {
-    helperEl.textContent = "Enter PDD or SPD to calculate the other distance.";
-    ugEl.textContent = "—";
-    ugStatusEl.textContent = "—";
-  } else if (spd && pdd) {
-    helperEl.textContent = "Two-way solve active with full UG validation.";
-    ug = (d * pdd) / spd;
-    ugPass = ug <= ugLimit;
-    ugEl.textContent = formatNumber(ug, 4);
-    ugStatusEl.textContent = ugPass ? "PASS" : "FAIL";
-
-    if (!ugPass) {
-      const msg = `FAIL: UG ${formatNumber(ug, 4)} > Ug_limit ${formatNumber(ugLimit, 4)}.`;
-      shotWarningsEl.appendChild(createWarning(msg, "red"));
-      warnings.push(msg);
-    } else {
-      shotWarningsEl.appendChild(createWarning(`PASS: UG ${formatNumber(ug, 4)} ≤ Ug_limit ${formatNumber(ugLimit, 4)}.`, "yellow"));
-    }
-  } else {
-    helperEl.textContent = "Enter both PDD and SPD to compute actual UG pass/fail.";
-    ugEl.textContent = "—";
-    ugStatusEl.textContent = "PENDING";
-  }
-
-  const sodApprox = spd && pdd ? spd - pdd : null;
-  const magPercent = sodApprox && sodApprox > 0 ? ((spd / sodApprox) - 1) * 100 : null;
-  magEl.textContent = magPercent === null ? "—" : `${formatNumber(magPercent, 1)}%`;
-
-  const exposureMinutes = spd ? getExposureEstimateMinutes(spd) : null;
-  exposureEl.textContent = exposureMinutes === null ? "—" : `${formatNumber(exposureMinutes, 1)} min`;
-
-  return { warnings, data: { config, view, direction, spd, pdd, d, ugLimit, ug, ugPass, spdMin, pddMax, magPercent, exposureMinutes } };
-}
-
-function syncShotDFixedValue() {
-  const fixedD = fields.focusSpot.value;
-  shotsContainer.querySelectorAll(".d-input").forEach((input) => {
-    input.value = fixedD;
-  });
-}
-
-function evaluateAllShots() {
-  const attenuation = getAttenuationSummary();
-  const planning = estimatePlanningTimes();
-  const boundaries = updateBoundaries(attenuation.attenuationFactor);
-
-  const shotResults = [...shotsContainer.querySelectorAll(".shot-card")].map((shot) => evaluateShot(shot));
-
-  ui.globalWarningsEl.innerHTML = "";
-  const missing = [];
-  if (!fields.technicianName.value.trim()) missing.push("Technician Name");
-  if (!fields.activity.value) missing.push("Source Activity (Ci)");
-  if (!fields.focusSpot.value) missing.push("Focal Spot Size d");
-  if (!fields.beamOnMinutesPerHour.value) missing.push("Beam On Minutes Per Hour");
-
-  if (missing.length) {
-    ui.globalWarningsEl.appendChild(createWarning(`Missing required inputs: ${missing.join(", ")}.`, "red"));
-  }
-
-  if (shotResults.some((r) => r.warnings.length > 0)) {
-    ui.globalWarningsEl.appendChild(createWarning("One or more shot cards are out of UG or geometry limits.", "red"));
-  }
-
-  return { attenuation, planning, boundaries, shotResults };
-}
-
-function addMaterial(seed = {}) {
-  materialCounter += 1;
-  const fragment = materialTemplate.content.cloneNode(true);
-  const row = fragment.querySelector(".material-row");
-  row.dataset.materialId = String(materialCounter);
-
-  const materialSelect = row.querySelector(".material-name");
-  const thicknessInput = row.querySelector(".material-thickness");
-  const hvlInput = row.querySelector(".material-hvl");
-  const overrideInput = row.querySelector(".material-override");
-
-  materialSelect.value = seed.materialName ?? "Steel";
-  thicknessInput.value = seed.thickness ?? "";
-  overrideInput.checked = seed.override ?? false;
-
-  refreshMaterialRowFromLookup(row);
-  if (seed.hvl) hvlInput.value = seed.hvl;
-
-  [materialSelect, thicknessInput, hvlInput, overrideInput].forEach((input) => {
-    input.addEventListener("input", () => {
-      if (input === materialSelect || input === overrideInput) refreshMaterialRowFromLookup(row);
-      evaluateAllShots();
-    });
-    input.addEventListener("change", () => {
-      if (input === materialSelect || input === overrideInput) refreshMaterialRowFromLookup(row);
-      evaluateAllShots();
-    });
+  const d2 = RTCalc.barricadeDistanceFt({
+    activityCi,
+    gammaConstantMrPerHrPerCi: gamma,
+    timeHours,
+    attenuation,
+    targetMrPerHr: RTCalc.TARGETS.publicBoundary,
   });
 
-  row.querySelector(".remove-material").addEventListener("click", () => {
-    row.remove();
-    evaluateAllShots();
+  const d100 = RTCalc.barricadeDistanceFt({
+    activityCi,
+    gammaConstantMrPerHrPerCi: gamma,
+    timeHours,
+    attenuation,
+    targetMrPerHr: RTCalc.TARGETS.highRadArea,
   });
 
-  materialsContainer.appendChild(fragment);
-  evaluateAllShots();
+  ui.distance2.textContent = `${formatDistance(d2, fields.roundingMode.value)} (mR/hr, ft)`;
+  ui.distance100.textContent = `${formatDistance(d100, fields.roundingMode.value)} (mR/hr, ft)`;
 }
-
-function refreshAllMaterialRowsFromLookup() {
-  materialsContainer.querySelectorAll(".material-row").forEach((row) => refreshMaterialRowFromLookup(row));
-}
-
-function addShot() {
-  shotCounter += 1;
-  const fragment = shotTemplate.content.cloneNode(true);
-  const shotEl = fragment.querySelector(".shot-card");
-  shotEl.querySelector(".shot-name").textContent = `Shot ${shotCounter} — Config 1`;
-
-  const spdInput = shotEl.querySelector(".spd-input");
-  const pddInput = shotEl.querySelector(".pdd");
-  const ugLimitInput = shotEl.querySelector(".ug-limit");
-  const dInput = shotEl.querySelector(".d-input");
-  const configInput = shotEl.querySelector(".config-input");
-  const viewInput = shotEl.querySelector(".view-input");
-  const directionInput = shotEl.querySelector(".direction-input");
-
-  dInput.value = fields.focusSpot.value || "";
-  ugLimitInput.value = String(DEFAULT_UG_LIMIT);
-  configInput.value = "1";
-
-  const syncHeader = () => {
-    shotEl.querySelector(".shot-name").textContent = `Shot ${shotCounter} — Config ${configInput.value}`;
-  };
-  syncHeader();
-
-  [spdInput, pddInput, ugLimitInput, configInput, viewInput, directionInput].forEach((input) => {
-    input.addEventListener("input", () => {
-      syncHeader();
-      evaluateAllShots();
-    });
-    input.addEventListener("change", () => {
-      syncHeader();
-      evaluateAllShots();
-    });
-  });
-
-  shotEl.querySelector(".remove-shot").addEventListener("click", () => {
-    shotEl.remove();
-    evaluateAllShots();
-  });
-
-  shotsContainer.appendChild(fragment);
-  evaluateAllShots();
-}
-
-function buildPdfLines(summary) {
-  const { attenuation, planning, boundaries, shotResults } = summary;
-  const lines = [];
-
-  lines.push("RT Shot & Safety Calculator Report");
-  lines.push("=============================================");
-  lines.push(`Technician Name: ${fields.technicianName.value || "-"}`);
-  lines.push(`Job / Work Order: ${fields.jobWorkOrder.value || "-"}`);
-  lines.push(`Location / Unit: ${fields.locationUnit.value || "-"}`);
-  lines.push(`Date: ${fields.jobDate.value || "-"}`);
-  lines.push("");
-
-  lines.push("Source Information");
-  lines.push(`Isotope: ${fields.isotope.value}`);
-  lines.push(`Source Activity (Ci): ${fields.activity.value || "-"}`);
-  lines.push(`Focal Spot Size d: ${fields.focusSpot.value || "-"}`);
-  lines.push(`Source serial / camera ID: ${fields.sourceSerial.value || "-"}`);
-  lines.push(`Gamma Constant (Γ): ${fields.gammaConstant.value || "-"}`);
-  lines.push("");
-
-  lines.push("ESTIMATE – Pre-job planning");
-  lines.push(`Estimated total exposure input: ${fields.estimatedTotalExposure.value || "-"} ${fields.exposureUnits.value}`);
-  lines.push(`Number of exposures: ${fields.numberOfExposures.value || "-"}`);
-  lines.push(`Estimated exposure @ 1 ft (unshielded): ${boundaries.exposure1ft === null ? "-" : `${formatNumber(boundaries.exposure1ft, 1)} R/hr`}`);
-  lines.push(`Estimated exposure per shot: ${planning.perShotMinutes === null ? "-" : `${formatNumber(planning.perShotMinutes, 1)} min`}`);
-  lines.push(`Estimated total exposure time: ${planning.totalMinutes === null ? "-" : `${formatNumber(planning.totalMinutes, 1)} min`}`);
-  lines.push("");
-
-  lines.push("Material Attenuation Stack");
-  attenuation.materials.forEach((m, idx) => {
-    lines.push(`Layer ${idx + 1}: ${m.materialName} | Thickness: ${m.thickness ?? "-"} in | HVL: ${m.hvl ?? "-"} in | HVL_count: ${m.hvlCount === null ? "-" : formatNumber(m.hvlCount, 3)}${m.override ? " (override)" : ""}`);
-  });
-  lines.push(`Total_HVLs: ${formatNumber(attenuation.totalHVLs, 3)}`);
-  lines.push(`Attenuation_factor (0.5 ^ total_HVLs): ${formatNumber(attenuation.attenuationFactor, 6)}`);
-  lines.push("");
-
-  lines.push("Radiation Boundaries");
-  lines.push(`Exposure_1ft (unshielded): ${boundaries.exposure1ft === null ? "-" : `${formatNumber(boundaries.exposure1ft, 1)} R/hr`}`);
-  lines.push(`BeamOnMinutesPerHour: ${boundaries.beamOnMinutesPerHour ?? "-"}`);
-  lines.push(`AllowedRateDuringShot_mRhr: ${boundaries.allowedRateDuringShot === null ? "-" : formatNumber(boundaries.allowedRateDuringShot, 2)}`);
-  lines.push(`2 mR/hr (Time-Weighted) distance (Shielded): ${boundaries.d2 === null ? "-" : `${formatNumber(boundaries.d2, 2)} ft`}`);
-  lines.push(`100 mR/hr distance (Shielded): ${boundaries.d100 === null ? "-" : `${formatNumber(boundaries.d100, 2)} ft`}`);
-  lines.push("");
-
-  lines.push("Shot Cards / Step 5 UG");
-  shotResults.forEach((result, idx) => {
-    lines.push(`Shot ${idx + 1}`);
-    if (!result.data) {
-      lines.push("  Incomplete shot inputs.");
-      return;
-    }
-    lines.push(`  Shot #: ${idx + 1}`);
-    lines.push(`  Config: ${result.data.config}`);
-    lines.push(`  View: ${result.data.view}`);
-    lines.push(`  Direction: ${result.data.direction}`);
-    lines.push(`  SPD: ${result.data.spd === null ? "-" : `${formatNumber(result.data.spd, 2)} in`}`);
-    lines.push(`  PDD: ${result.data.pdd === null ? "-" : `${formatNumber(result.data.pdd, 2)} in`}`);
-    lines.push(`  Ug_limit: ${formatNumber(result.data.ugLimit, 4)} in`);
-    lines.push(`  Minimum SPD required: ${result.data.spdMin === null ? "-" : `${formatNumber(result.data.spdMin, 2)} in`}`);
-    lines.push(`  Maximum PDD allowed: ${result.data.pddMax === null ? "-" : `${formatNumber(result.data.pddMax, 2)} in`}`);
-    lines.push(`  UG: ${result.data.ug === null ? "-" : formatNumber(result.data.ug, 4)}`);
-    lines.push(`  PASS/FAIL: ${result.data.ugPass === null ? "PENDING" : result.data.ugPass ? "PASS" : "FAIL"}`);
-    lines.push(`  Est Time: ${result.data.exposureMinutes === null ? "-" : `${formatNumber(result.data.exposureMinutes, 1)} min`}`);
-    lines.push(`  Notes: -`);
-  });
-
-  return lines;
-}
-
-function generatePdf() {
-  const summary = evaluateAllShots();
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ format: "letter", unit: "pt" });
-  doc.setFont("helvetica", "normal");
-  doc.setFontSize(11);
-
-  const lines = buildPdfLines(summary);
-  const pageHeight = doc.internal.pageSize.height;
-  let y = 44;
-  lines.forEach((line) => {
-    if (y > pageHeight - 44) {
-      doc.addPage("letter");
-      y = 44;
-    }
-    doc.text(line, 44, y);
-    y += 16;
-  });
-
-  doc.save(`rt-shot-safety-${fields.jobDate.value || "report"}.pdf`);
-}
-
-addMaterialBtn.addEventListener("click", () => addMaterial());
-addShotBtn.addEventListener("click", addShot);
-generatePdfBtn.addEventListener("click", generatePdf);
 
 Object.values(fields).forEach((field) => {
-  field.addEventListener("input", () => {
-    if (field === fields.focusSpot) syncShotDFixedValue();
-    if (field === fields.isotope) {
-      setGammaDefault();
-      refreshAllMaterialRowsFromLookup();
-    }
-    evaluateAllShots();
-  });
-  field.addEventListener("change", () => {
-    if (field === fields.focusSpot) syncShotDFixedValue();
-    if (field === fields.isotope) {
-      setGammaDefault();
-      refreshAllMaterialRowsFromLookup();
-    }
-    evaluateAllShots();
-  });
+  field.addEventListener('input', evaluate);
+  field.addEventListener('change', evaluate);
 });
 
-fields.jobDate.valueAsDate = new Date();
-setGammaDefault();
-addMaterial({ materialName: "Steel", thickness: "1.00" });
-addShot();
-syncShotDFixedValue();
-evaluateAllShots();
+setGammaText();
+fields.isotope.addEventListener('change', setGammaText);
+evaluate();

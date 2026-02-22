@@ -231,3 +231,5 @@ button:focus {
   align-self: flex-start;
   transform: scale(1.2);
 }
+
+.hidden { display: none; }
