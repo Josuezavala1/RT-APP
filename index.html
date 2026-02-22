@@ -10,11 +10,33 @@
     <main class="app">
       <header class="app-header">
         <h1>RT Barricade Calculator</h1>
-        <p class="subtitle">Time-weighted barricade distance (per hour), HVL-based shielding, mR/hr only.</p>
+        <p class="subtitle">Complete workflow: job + source + duty-cycle barricade + materials + shot cards + PDF (mR/hr only).</p>
       </header>
 
       <section class="card">
-        <h2>Source Inputs</h2>
+        <h2>Job Information</h2>
+        <div class="grid">
+          <label>
+            Job Number
+            <input id="jobNumber" type="text" placeholder="e.g. J-24018" />
+          </label>
+          <label>
+            Customer / Site
+            <input id="jobSite" type="text" placeholder="Plant / Unit" />
+          </label>
+          <label>
+            Technician Name
+            <input id="technicianName" type="text" placeholder="Required for PDF" />
+          </label>
+          <label>
+            Date
+            <input id="jobDate" type="date" />
+          </label>
+        </div>
+      </section>
+
+      <section class="card">
+        <h2>Source Information</h2>
         <div class="grid">
           <label>
             Isotope
@@ -26,10 +48,10 @@
           </label>
           <label>
             Source Activity (Ci)
-            <input id="activityCi" type="number" min="0" step="0.01" />
+            <input id="activityCi" type="number" min="0" step="0.01" value="0" />
           </label>
           <label>
-            Gamma Constant
+            Gamma Constant (locked)
             <input id="gammaConstant" type="text" readonly />
             <small>mR/hr per Ci @ 1 ft</small>
           </label>
@@ -37,72 +59,69 @@
       </section>
 
       <section class="card">
-        <h2>Shielding (HVL)</h2>
+        <h2>Barricade / Boundary Calculator</h2>
         <div class="grid">
           <label>
-            Collimator HVL count
-            <input id="collimatorHvl" type="number" min="0" step="0.01" value="0" />
-          </label>
-          <label>
-            Additional HVL layers
-            <input id="additionalHvl" type="number" min="0" step="0.01" value="0" />
-          </label>
-        </div>
-        <div class="results">
-          <div class="result-item"><strong>Total HVL:</strong> <span id="totalHvl">—</span></div>
-          <div class="result-item"><strong>Attenuation factor (0.5^totalHVL):</strong> <span id="attenuation">—</span></div>
-        </div>
-      </section>
-
-      <section class="card">
-        <h2>Time Input (per hour)</h2>
-        <div class="grid">
-          <label>
-            Time workflow
-            <select id="timeMode">
-              <option value="single-plus-rate">Single exposure time (minutes) + exposures per hour</option>
-              <option value="count-plus-seconds">Number of exposures + seconds per exposure</option>
+            Target Limit (mR/hr)
+            <select id="targetLimit">
+              <option value="2">2 mR/hr (Public Boundary)</option>
+              <option value="100">100 mR/hr (High Radiation Area)</option>
             </select>
           </label>
-          <label id="singleMinutesWrap">
-            Single exposure time (minutes)
-            <input id="singleMinutes" type="number" min="0" step="0.01" value="0" />
+          <label>
+            Time Input Mode
+            <select id="timeMode">
+              <option value="exp-seconds">Exposures/hour + seconds/exposure</option>
+              <option value="total-seconds">Total exposure seconds/hour</option>
+            </select>
           </label>
-          <label id="exposuresPerHourWrap">
+          <label>
             Exposures per hour
             <input id="exposuresPerHour" type="number" min="0" step="1" value="0" />
           </label>
-          <label id="exposureCountWrap" class="hidden">
-            Number of exposures
-            <input id="exposureCount" type="number" min="0" step="1" value="0" />
-          </label>
-          <label id="secondsPerExposureWrap" class="hidden">
+          <label id="secondsPerExposureWrap">
             Seconds per exposure
             <input id="secondsPerExposure" type="number" min="0" step="0.1" value="0" />
           </label>
+          <label id="totalSecondsWrap" class="hidden">
+            Total exposure seconds/hour
+            <input id="totalSecondsPerHour" type="number" min="0" step="0.1" value="0" />
+          </label>
         </div>
         <div class="results">
-          <div class="result-item"><strong>Total exposure time per hour:</strong> <span id="timeHours">—</span></div>
+          <div class="result-item"><strong>Time fraction:</strong> <span id="timeFraction">—</span></div>
+          <div class="result-item"><strong>Barricade distance for selected target:</strong> <span id="selectedDistance">—</span></div>
+          <div class="result-item"><strong>Distance @ 2 mR/hr:</strong> <span id="distance2">—</span></div>
+          <div class="result-item"><strong>Distance @ 100 mR/hr:</strong> <span id="distance100">—</span></div>
+        </div>
+        <div id="validation" class="warnings"></div>
+      </section>
+
+      <section class="card">
+        <h2>Material Attenuation Stack</h2>
+        <p class="hint">Add one or more layers. Each layer uses HVL count, or optional thickness override.</p>
+        <div id="materials" class="materials"></div>
+        <div class="controls-row">
+          <button id="addMaterial" class="btn btn-primary" type="button">+ Add Material Layer</button>
+        </div>
+        <div class="results">
+          <div class="result-item"><strong>Combined attenuation factor:</strong> <span id="combinedAttenuation">—</span></div>
         </div>
       </section>
 
       <section class="card">
-        <h2>Barricade Distances (mR/hr targets)</h2>
-        <div class="grid">
-          <label>
-            Display mode
-            <select id="roundingMode">
-              <option value="field">Field rounding (round UP to nearest 5 ft)</option>
-              <option value="exact">Exact (2 decimals)</option>
-            </select>
-          </label>
+        <h2>Shot Cards</h2>
+        <p class="hint">UG and blowup tools are included per shot.</p>
+        <div id="shots" class="shots"></div>
+        <div class="controls-row">
+          <button id="addShot" class="btn btn-primary" type="button">+ Add Shot Card</button>
         </div>
-        <div class="results">
-          <div class="result-item"><strong>Recommended barricade (2 mR/hr public boundary):</strong> <span id="distance2">—</span></div>
-          <div class="result-item"><strong>Recommended barricade (100 mR/hr high rad area):</strong> <span id="distance100">—</span></div>
-        </div>
-        <div id="validation" class="warnings"></div>
-        <p class="hint">Always verify site conditions and posted requirements.</p>
+      </section>
+
+      <section class="card final-card">
+        <h2>PDF Export</h2>
+        <p class="hint">Exports Job + Source + Barricade + Materials + Shot Cards.</p>
+        <button id="exportPdf" class="btn btn-generate" type="button">Export PDF Summary</button>
       </section>
     </main>
 
